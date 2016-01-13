@@ -1,0 +1,309 @@
+<!--
+
+`taaabs-trace-to-model-behavior` is a Polymer Behavior that can create a Model from the data inside a Trace.
+
+@polymerBehavior
+
+-->
+
+
+<!-- for JSONLD -->
+<script src="../jsonld/js/jsonld.js"></script>
+
+<!-- http://underscorejs.org/
+for functional filtering, uniq... -->
+<script src="../underscore/underscore-min.js"></script>
+
+<script>
+  /* global TaaabsBehaviors:true */
+  /* exported TaaabsBehaviors */
+
+  var TaaabsBehaviors = TaaabsBehaviors || {};
+
+  /**
+   * `TaaabsBehaviors.TraceToModel` is a Polymer Behavior that can create
+   * a Model from the data inside a Trace.
+   *
+   * @polymerBehavior
+   */
+  TaaabsBehaviors.TraceToModel = {
+    /* global _, jsonld */
+
+    properties: {
+      /**
+       * A String holding a String representation of the Model according to
+       * <http://liris.cnrs.fr/silex/2011/ktbs-jsonld-context>
+       */
+      modeldata: {
+        type: String,
+        notify: true
+      },
+
+      /**
+       * An Object holding a representation of the Trace according to
+       * KTBS.Trace.js of the Samotraces lib
+       * <https://github.com/liris-tweak/samotraces.js/blob/master/src/core/KTBS.Trace.js>
+       */
+      trace: {
+        type: Object
+        //observer: '_traceChanged',
+      }
+    },
+
+    /**
+     * When the trace instance changes, we get the Obsels list, then we Parse
+     * it to extract a model from it.
+     * the model will be available on `this.model` property
+     */
+    _generateModelFromTrace: function(trace,model,callback) {
+      // Start to fetch the server to get obsels
+      //trace.list_obsels(); // jshint ignore:line
+
+    //  trace.on('trace:updateCompleted', (function() {
+        // We now have all obsels, we can get the obsel list
+        var obsels = trace.obsel_list; // jshint ignore:line
+
+        // Define the proper JSONLD context
+        var context = 'http://liris.cnrs.fr/silex/2011/ktbs-jsonld-context';
+
+        // Fix trace url (Samotrace wrote URL like this: "http://localhost:8001/base42/./t4242/")
+        //var traceUrl = trace.get_uri().replace('./', ''); // jshint ignore:line
+        var traceUrl = trace.get_uri();
+        // Parse informations about trace uri, traceName
+        /*var parsedTraceInformations = this._traceUriParser(traceUrl); // jshint ignore:line
+        var baseUrl = parsedTraceInformations.baseUrl;
+        var traceName = parsedTraceInformations.traceName;
+        this.baseUrl = baseUrl;
+
+        // Create a virtual Uri for the generated model to be able tu PUT it to the KTBS if needed
+        var modelUrl = baseUrl + traceName + '-' + 'model';
+        this.modelUrl = modelUrl;*/
+          var modelUrl = trace.get_model();
+          this.modelUrl = modelUrl;
+          var doc = {
+          '@context': 'http://liris.cnrs.fr/silex/2011/ktbs-jsonld-context',
+          '@graph': [{
+            '@id': modelUrl,
+            '@type': 'TraceModel',
+            'inBase': './',
+            'hasUnit': 'millisecond'
+          }]
+        };
+
+        // Keep only useful information for the model
+        var obselInformations = _.map(obsels, function(obsel) {
+          return {
+            'obselType': obsel.type,
+            'obselAttributes': _.map(Object.keys(obsel.attributes),
+                function(obselAttribute) {
+              return {
+                'obselAttribute': obselAttribute,
+                'hasAttributeDatatype': 'xsd:string' // TODO HARDCODED datatype
+                // TODO label ??
+              };
+            })
+          };
+        });
+        // Remove duplicates
+        obselInformations = _.uniq(obselInformations, function(e) {
+          return e.obselType;
+        });
+
+        _.each(obselInformations, function(obselInformation) {
+          doc['@graph'].push({
+            '@id': '#' + obselInformation.obselType,
+            '@type': 'ObselType'
+          });
+          _.each(obselInformation.obselAttributes,
+              function(obselAttributeObject) {
+            doc['@graph'].push({
+              '@id': '#' + obselAttributeObject.obselAttribute,
+              '@type': 'AttributeType',
+              'hasAttributeObselType': '#' + obselInformation.obselType,
+              'hasAttributeDatatype': obselAttributeObject.hasAttributeDatatype,
+              'label':obselAttributeObject.obselAttribute
+              // TODO label ??
+            });
+          });
+        });
+
+        var that = this;
+
+        // This is not technically required
+        // We use this to do JSON-LD validation:
+        jsonld.promises.compact(doc, context).then(function(compact) {
+          that.modeldata = JSON.stringify(compact, null, 2);
+          //var baseObj = new Samotraces.Ktbs.Base (trace.get_base());
+          //baseObj.create_model(modelUrl);
+          model.put_model(that.modeldata).then(function(model){
+            callback(model);
+          });
+
+        });
+      //}).bind(this));
+
+    }
+
+    /**
+     * Perform an HTTP DELETE on the `this.modelUrl` ressource
+     */
+    /*deleteModel: function() {
+      var that = this;
+      return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('DELETE', that.modelUrl, true);
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4) {
+            if(xhr.status === 204) {
+              resolve(xhr);
+            } else {
+              reject(xhr);
+            }
+          }
+        };
+        xhr.onerror = function() {
+          reject(Error('There was a network error.'));
+        };
+        xhr.send(null);
+      });
+    },
+
+    _getModel: function(options) {
+      return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', options.modelUrl, true);
+        xhr.setRequestHeader('Accept', 'application/ld+json');
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4) {
+            if(xhr.status === 200) {
+              if(!!xhr.getResponseHeader('etag')) {
+                resolve({
+                  'etag': xhr.getResponseHeader('etag'),
+                  'modelUrl': options.modelUrl
+                });
+              } else {
+                reject(xhr);
+              }
+            } else {
+              reject(xhr);
+            }
+          }
+        };
+        xhr.onerror = function() {
+          reject(Error('There was a network error.'));
+        };
+        xhr.send(null);
+      });
+    },
+
+    /**
+     * Perform an HTTP POST on the `this.baseUrl` ressource
+     */
+    /*_postModel: function() {
+      // KTBS only accept an empty model on POST
+      var emptyModel = {
+        '@context': 'http://liris.cnrs.fr/silex/2011/ktbs-jsonld-context',
+        '@graph': [
+          {
+            '@id': this.modelUrl,
+            'inBase': './',
+            '@type': 'TraceModel',
+            'hasUnit': 'millisecond'
+          }
+        ]
+      };
+
+      var that = this;
+      return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', that.baseUrl, true);
+        xhr.setRequestHeader('Content-type', 'application/ld+json');
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4) {
+            if(xhr.status === 201) {
+              resolve(xhr);
+            } else {
+              reject(xhr);
+            }
+          }
+        };
+        xhr.onerror = function() {
+          reject(Error('There was a network error.'));
+        };
+        xhr.send(JSON.stringify(emptyModel));
+      });
+    },
+
+    putModel: function(info) {
+      var that = this;
+      return new Promise(function(resolve, reject) {
+        // PUT
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', info.modelUrl, true);
+        xhr.setRequestHeader('Content-Type', 'application/ld+json');
+        xhr.setRequestHeader('If-Match', info.etag);
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState === 4) {
+            if(xhr.status === 200) {
+              console.log('OKOKOK');
+              resolve(xhr);
+            } else {
+              reject(xhr);
+            }
+          }
+        };
+        xhr.onerror = function() {
+          reject(Error('There was a network error.'));
+        };
+        xhr.send(that.modeldata);
+      });
+    },
+
+    postModel: function() {
+      var that = this;
+
+      return new Promise(function(resolve, reject) {
+        that._postModel().then(function(xhr) {
+          var newModelUrl = xhr.responseText.replace(/<|>/g, '');
+          return that._getModel({
+            'modelUrl': newModelUrl
+          });
+        }).then(function(info) {
+          that.putModel({
+            'modelUrl': info.modelUrl,
+            'etag': info.etag
+          }).catch(function (err) {
+            reject(err);
+          });
+        }).catch(function (err) {
+          console.error(err.statusText);
+          reject(err.statusText);
+        });
+      });
+    },
+
+    /**
+     * @return {Object} an Object holding informations about base url
+     * and trace name, in both case if the URL finish by `/` or not.
+     */
+    /*_traceUriParser: function(traceUri) {
+      var traceUriArray = traceUri.split('/');
+      var baseUrl = '';
+      var traceName = '';
+
+      if (traceUriArray.slice(-1)[0] === '') {
+        // http://localhost:8001/base1/t01/ (with '/' suffix)
+        baseUrl = traceUriArray.slice(0, traceUriArray.length - 2);
+        traceName = traceUriArray[traceUriArray.length - 2];
+      } else {
+        // http://localhost:8001/base1/t01 (without '/' suffix)
+        baseUrl = traceUriArray.slice(0, traceUriArray.length - 1);
+        traceName = traceUriArray[traceUriArray.length - 1];
+      }
+      return {
+        'baseUrl': baseUrl.join('/') + '/',
+        'traceName': traceName
+      };
+    }*/
+  };
+</script>

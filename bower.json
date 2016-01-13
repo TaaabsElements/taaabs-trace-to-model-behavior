@@ -1,0 +1,29 @@
+{
+  "name": "taaabs-trace-to-model-behavior",
+  "version": "1.0.0",
+  "description": "`taaabs-trace-to-model-behavior` is a Polymer Behavior that can create a Model from the data inside a Trace.",
+  "keywords": [
+    "web-components",
+    "polymer",
+    "taaabs"
+  ],
+  "authors": [
+    "TaaabsTeam"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TaaabsElements/taaabs-trace-to-model-behavior.git"
+  },
+  "main": "taaabs-trace-to-model-behavior.html",
+  "license": "https://github.com/TaaabsElements/taaabs-trace-to-model-behavior/LICENSE",
+  "dependencies": {
+    "polymer": "polymer/polymer#^1.0.0",
+		"jsonld": "~0.3.24",
+		"underscore": "~1.8.3"
+  },
+  "devDependencies": {
+    "iron-component-page": "polymerelements/iron-component-page#^1.0.0",
+    "webcomponentsjs": "webcomponents/webcomponentsjs#^0.7.0"
+  },
+  "ignore": []
+}
