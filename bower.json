@@ -17,9 +17,7 @@
   "main": "taaabs-trace-to-model-behavior.html",
   "license": "https://github.com/TaaabsElements/taaabs-trace-to-model-behavior/LICENSE",
   "dependencies": {
-    "polymer": "polymer/polymer#^1.0.0",
-		"jsonld": "~0.3.24",
-		"underscore": "~1.8.3"
+    "polymer": "polymer/polymer#^1.0.0"
   },
   "devDependencies": {
     "iron-component-page": "polymerelements/iron-component-page#^1.0.0",
